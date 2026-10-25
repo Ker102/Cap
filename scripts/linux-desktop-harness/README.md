@@ -68,9 +68,11 @@ real login activates.
 
 - `x11-capture.sh <cap-gpui> <ffmpeg lib dir> <out-dir>` records the display,
   an area and another app's window on Xvfb (MIT-SHM capture, no portal),
-  pressing the Stop shortcut with real X input where Cap waits for it, takes a
-  screenshot, and checks the size and length of each result. It also checks the
-  window picker offers the other app's window rather than one of Cap's own.
+  pressing the Stop shortcut with real X input where Cap waits for it, records
+  the microphone and system audio from a tone a private PulseAudio plays, takes
+  a screenshot, and checks the size, length and loudness of each result. It also
+  checks the window picker offers the other app's window rather than one of
+  Cap's own.
 
 - `niri-screencast/run.sh` records through Cap's PipeWire capture loop from a
   producer that negotiates and shares frames the way niri 26.04 does: a

@@ -75,6 +75,12 @@ if data[:6] in (b"GIF87a", b"GIF89a"):
 PY
 }
 
+# An export holds the whole clip: its length is the recording's, give or take
+# half a second.
+matches_source() {
+  awk -v s="$1" -v want="${source_seconds:-0}" 'BEGIN { d = s - want; if (d < 0) d = -d; print (want >= 1 && d <= 0.5 ? "yes" : "no") }'
+}
+
 export_once() {
   local kind=$1 file=$out/export.$1 name=cap-$1
   bash "$here/launch-cap.sh" "$name" CAP_GPUI_AUTO_EDITOR=1 CAP_GPUI_AUTO_EXPORT="$file" >/dev/null
@@ -91,18 +97,20 @@ export_once() {
     local seconds
     seconds=$(mp4_seconds "$file" 2>/dev/null)
     echo "mp4 seconds: ${seconds:-none}, bytes: $(stat -c %s "$file" 2>/dev/null)" >>"$out/actions.log"
-    result mp4_has_video "$(awk -v s="${seconds:-0}" 'BEGIN { print (s >= 1 ? "yes" : "no") }')"
+    result mp4_has_video "$(matches_source "${seconds:-0}")"
   else
     local frames seconds
     read -r frames seconds < <(gif_frames_and_seconds "$file" 2>/dev/null)
     echo "gif frames: ${frames:-none}, seconds: ${seconds:-none}, bytes: $(stat -c %s "$file" 2>/dev/null)" >>"$out/actions.log"
-    result gif_has_video "$(awk -v s="${seconds:-0}" 'BEGIN { print (s >= 1 ? "yes" : "no") }')"
+    result gif_has_video "$(matches_source "${seconds:-0}")"
   fi
   result "${kind}_cap_alive" "$(kill -0 "$(cat "$XDG_RUNTIME_DIR/$name.pid" 2>/dev/null)" 2>/dev/null && echo yes || echo no)"
   kill "$(cat "$XDG_RUNTIME_DIR/$name.pid" 2>/dev/null)" 2>/dev/null
   sleep 2
 }
 
+source_seconds=$(mp4_seconds "$(find "$out/profile/recordings" -path "*segment-0/display.mp4" | head -1)" 2>/dev/null)
+echo "recording seconds: ${source_seconds:-none}" >>"$out/actions.log"
 export_once mp4
 export_once gif
 cat "$out/result.txt"

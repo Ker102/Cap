@@ -123,9 +123,9 @@ jobs:
           bash scripts/linux-desktop-harness/dialog-x11.sh \
             apps/desktop-gpui/target/debug/cap-gpui target/native-deps/lib
 
-      - name: X11 display, area and window recordings and a screenshot
+      - name: X11 display, area and window recordings, audio and a screenshot
         run: |
-          sudo apt-get install -y -qq x11-utils >/dev/null
+          sudo apt-get install -y -qq x11-utils pulseaudio pulseaudio-utils libasound2-plugins ffmpeg >/dev/null
           bash scripts/linux-desktop-harness/x11-capture.sh \
             apps/desktop-gpui/target/debug/cap-gpui target/native-deps/lib "$RUNNER_TEMP/out/x11-capture"
 

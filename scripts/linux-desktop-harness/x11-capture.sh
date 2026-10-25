@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 # Cap's recording targets on X11 (Xvfb, MIT-SHM capture, no portal): a Studio
-# recording of the display, of an area and of another app's window, and a
-# screenshot. Display and area recordings hide Cap and wait for the Stop
-# shortcut to start and to stop, pressed here with real X input (xdotool).
-# Checks each recording finished, kept no backup of replaced media and holds
-# video of the target's size. Prints key=value results to <out-dir>/result.txt and
-# fails unless every case passed.
+# recording of the display, of an area and of another app's window, one with
+# the microphone and system audio, and a screenshot. Display and area
+# recordings hide Cap and wait for the Stop shortcut to start and to stop,
+# pressed here with real X input (xdotool). A private PulseAudio plays a tone
+# into a null sink, whose monitor is system audio; a source remapped from that
+# monitor is the default microphone. Checks each recording finished, kept no
+# backup of replaced media and holds video of the target's size, and that both
+# audio tracks hold the tone. Prints key=value results to <out-dir>/result.txt
+# and fails unless every case passed.
 # Usage: x11-capture.sh <cap-gpui> <ffmpeg lib dir> <out-dir>
 set -uo pipefail
-command -v Xvfb >/dev/null && command -v xdotool >/dev/null && command -v xmessage >/dev/null ||
-  { echo "install xvfb, xdotool and x11-utils" >&2; exit 2; }
+for tool in Xvfb xdotool xmessage pulseaudio pactl paplay ffmpeg; do
+  command -v "$tool" >/dev/null ||
+    { echo "install xvfb, xdotool, x11-utils, pulseaudio, pulseaudio-utils and ffmpeg" >&2; exit 2; }
+done
 if [[ -z ${X11_CAPTURE_BUS:-} ]]; then
   exec env X11_CAPTURE_BUS=1 dbus-run-session -- bash "$0" "$@"
 fi
@@ -24,7 +29,36 @@ xvfb=$!
 sleep 1
 xmessage -geometry 480x270+700+300 -title "Window to record" "A window to record" >/dev/null 2>&1 &
 other=$!
-trap 'kill $other $xvfb 2>/dev/null' EXIT
+
+pulse_dir=$(mktemp -d)
+export PULSE_SERVER=unix:$pulse_dir/native
+pulseaudio -n --daemonize=no --exit-idle-time=-1 --log-target=stderr \
+  -L "module-native-protocol-unix socket=$pulse_dir/native auth-anonymous=1" \
+  -L "module-null-sink sink_name=cap_tone" \
+  -L "module-remap-source master=cap_tone.monitor source_name=cap_mic" >"$out/pulse.log" 2>&1 &
+pulse=$!
+for _ in $(seq 40); do pactl info >/dev/null 2>&1 && break; sleep 0.25; done
+pactl set-default-sink cap_tone
+pactl set-default-source cap_mic
+python3 - "$out/tone.wav" <<'PY'
+import math
+import struct
+import sys
+import wave
+
+rate = 48000
+with wave.open(sys.argv[1], "wb") as tone:
+    tone.setnchannels(2)
+    tone.setsampwidth(2)
+    tone.setframerate(rate)
+    tone.writeframes(b"".join(
+        struct.pack("<hh", sample, sample)
+        for sample in (int(12000 * math.sin(2 * math.pi * 440 * n / rate)) for n in range(rate * 30))
+    ))
+PY
+(while paplay --device=cap_tone "$out/tone.wav"; do :; done) &
+player=$!
+trap 'pkill -P $player 2>/dev/null; kill $player $pulse $other $xvfb 2>/dev/null' EXIT
 
 # Prints "<seconds> <width> <height>" for the first video track of an MP4.
 mp4_info() {
@@ -142,7 +176,7 @@ record() {
   echo "$name: ${video:-no display.mp4} ${info:-}" >>"$out/actions.log"
   read -r seconds width height <<<"${info:-0 0 0}"
   result "${name}_video" "$(awk -v s="$seconds" -v w="$width" -v h="$height" -v W="$want_width" -v H="$want_height" \
-    'BEGIN { print (s >= 2 && w == W && h == H ? "yes" : "no") }')"
+    'BEGIN { print (s >= 3 && w == W && h == H ? "yes" : "no") }')"
   finish "$name"
 }
 
@@ -150,6 +184,19 @@ record display 1920 1080 yes CAP_GPUI_AUTO_RECORD=studio:60
 record area 640 360 yes CAP_GPUI_AUTO_RECORD=studio:60 CAP_GPUI_AUTO_OVERLAY=area CAP_GPUI_AUTO_AREA=100,100,640,360
 record window 480 270 no CAP_GPUI_AUTO_RECORD=studio:4 CAP_GPUI_AUTO_OVERLAY=window \
   CAP_GPUI_AUTO_WINDOW="Window to record"
+record audio 480 270 no CAP_GPUI_AUTO_RECORD=studio:4 CAP_GPUI_AUTO_OVERLAY=window \
+  CAP_GPUI_AUTO_WINDOW="Window to record" CAP_GPUI_AUTO_NO_MIC=0 CAP_GPUI_AUTO_SYSTEM_AUDIO=1
+for track in audio-input system_audio; do
+  file=$(find "$out/audio/recordings" -path "*segment-0/$track.m4a" 2>/dev/null | head -1)
+  seconds=0 level=-91
+  if [[ -n $file ]]; then
+    read -r seconds _ <<<"$(mp4_info "$file")"
+    level=$(ffmpeg -hide_banner -nostats -i "$file" -af volumedetect -f null - 2>&1 |
+      sed -n 's/.*mean_volume: \(-\{0,1\}[0-9.]*\) dB.*/\1/p')
+  fi
+  echo "audio $track: ${file:-missing} seconds=${seconds:-0} mean_volume=${level:--91}" >>"$out/actions.log"
+  result "audio_${track//-/_}" "$(awk -v s="${seconds:-0}" -v v="${level:--91}" 'BEGIN { print (s >= 3 && v > -40 ? "yes" : "no") }')"
+done
 
 # With no title to match, the picker's first window must be the other app's:
 # Cap's own windows are not offered.
