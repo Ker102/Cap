@@ -123,6 +123,12 @@ jobs:
           bash scripts/linux-desktop-harness/dialog-x11.sh \
             apps/desktop-gpui/target/debug/cap-gpui target/native-deps/lib
 
+      - name: X11 display, area and window recordings and a screenshot
+        run: |
+          sudo apt-get install -y -qq x11-utils >/dev/null
+          bash scripts/linux-desktop-harness/x11-capture.sh \
+            apps/desktop-gpui/target/debug/cap-gpui target/native-deps/lib "$RUNNER_TEMP/out/x11-capture"
+
       - name: Fetch the Cap package for desktop integration
         run: |
           curl --fail --location --retry 3 -o "$RUNNER_TEMP/cap.deb" "$CAP_DEB_URL"
@@ -221,6 +227,20 @@ jobs:
           cat "$RUNNER_TEMP/out/gnome-pick-background/result.txt"
           for line in recorded=yes editor_opened=yes chooser_opened=yes background_chosen=yes cap_alive=yes; do
             grep -qx "$line" "$RUNNER_TEMP/out/gnome-pick-background/result.txt"
+          done
+
+      - name: GNOME 50 editor export to MP4 and GIF
+        env:
+          DEV_BIN: ${{ github.workspace }}/apps/desktop-gpui/target/debug/cap-gpui
+          DEV_LIBS: ${{ github.workspace }}/target/native-deps/lib
+          SCENARIO: export
+        run: |
+          sudo -E bash scripts/linux-desktop-harness/run-desktop.sh gnome "$RUNNER_TEMP/cap.deb" \
+            "$RUNNER_TEMP/out/gnome-export" LAUNCH=dock APPROVE_SHORTCUT_AFTER=6
+          cat "$RUNNER_TEMP/out/gnome-export/result.txt"
+          for line in recorded=yes mp4_exported=yes mp4_has_video=yes mp4_cap_alive=yes gif_exported=yes \
+            gif_has_video=yes gif_cap_alive=yes; do
+            grep -qx "$line" "$RUNNER_TEMP/out/gnome-export/result.txt"
           done
 
       - name: Check results
