@@ -1,0 +1,56 @@
+name: Scratch AVF no-frame A/B
+
+on:
+  push:
+    branches: [ci/flake-avf-noframe]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  CAP_VERIFY_CARGO_PROFILE: ci-verify
+  CAP_VERIFY_NEXTEST_PROFILE: ci
+  CAP_VERIFY_LOCKED: "1"
+
+jobs:
+  ab:
+    name: playback x10 at ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: main
+            ref: 8a4b95c4a55455f0ba357005e98bf89027978171
+          - label: before-0325
+            ref: 39af8d5dc
+    runs-on: blacksmith-6vcpu-macos-15
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+      - name: Setup
+        uses: ./.github/actions/engine-verify-setup
+        with:
+          target: aarch64-apple-darwin
+          tier: fast
+      - name: Build
+        run: scripts/verify/run.sh fast --suites playback --no-run
+      - name: Prepare fixtures
+        run: scripts/verify/run.sh fast --suites playback --prepare-fixtures --no-run || true
+      - name: Ten playback runs
+        shell: bash
+        run: |
+          fails=0
+          for i in $(seq 10); do
+            export CAP_VERIFY_REPORT_DIR="$RUNNER_TEMP/report-$i"
+            if scripts/verify/run.sh fast --suites playback > "$RUNNER_TEMP/run-$i.log" 2>&1; then
+              echo "run $i pass"
+            else
+              fails=$((fails + 1))
+              echo "run $i FAIL: $(grep -ohE 'decoders returned no frame[^\"]*|case [^ ]+ failed' "$RUNNER_TEMP/run-$i.log" | sort -u | tr '\n' ';')"
+            fi
+          done
+          echo "${{ matrix.label }}: $fails of 10 playback runs failed"
