@@ -1,6 +1,13 @@
 # cargo-nextest settings. The engine verification suite (scripts/verify/run.sh)
 # runs with the `default` profile locally and `ci` in engine-verify.yml.
 
+# On macOS every suite that decodes or encodes through VideoToolbox shares the
+# machine's hardware media sessions. With six of them at once a playback
+# decode misses its deadline on an idle CPU (the sentinel sees no stall):
+# "decoders returned no frame for clip 0 at 12.100s". At most two at a time.
+[test-groups]
+videotoolbox = { max-threads = 2 }
+
 [profile.default]
 retries = 0
 fail-fast = false
@@ -21,6 +28,11 @@ threads-required = 3
 filter = '(binary_id(cap-verify::crash) and test(=crash_safety)) or (binary_id(cap-verify::playback) and test(=realtime_loop))'
 threads-required = "num-test-threads"
 priority = 100
+
+[[profile.default.overrides]]
+platform = 'cfg(target_os = "macos")'
+filter = '(binary_id(cap-verify::playback) or binary_id(cap-verify::seek) or binary_id(cap-verify::export) or binary_id(cap-verify::chaos) or binary_id(cap-verify::editing) or binary_id(cap-verify::captions)) and not test(=realtime_loop)'
+test-group = 'videotoolbox'
 
 [profile.ci]
 # No retries: a flaky case is a bug. run.sh reruns failures once afterwards
@@ -47,6 +59,11 @@ threads-required = 3
 filter = '(binary_id(cap-verify::crash) and test(=crash_safety)) or (binary_id(cap-verify::playback) and test(=realtime_loop))'
 threads-required = "num-test-threads"
 priority = 100
+
+[[profile.ci.overrides]]
+platform = 'cfg(target_os = "macos")'
+filter = '(binary_id(cap-verify::playback) or binary_id(cap-verify::seek) or binary_id(cap-verify::export) or binary_id(cap-verify::chaos) or binary_id(cap-verify::editing) or binary_id(cap-verify::captions)) and not test(=realtime_loop)'
+test-group = 'videotoolbox'
 
 
 # The FULL-tier seek storms (3000 seeks per decoder) are the slowest tests:
