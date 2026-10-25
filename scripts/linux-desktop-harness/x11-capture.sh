@@ -3,8 +3,8 @@
 # recording of the display, of an area and of another app's window, and a
 # screenshot. Display and area recordings hide Cap and wait for the Stop
 # shortcut to start and to stop, pressed here with real X input (xdotool).
-# Checks each recording finished, left no recovery data behind and holds video
-# of the target's size. Prints key=value results to <out-dir>/result.txt and
+# Checks each recording finished, kept no backup of replaced media and holds
+# video of the target's size. Prints key=value results to <out-dir>/result.txt and
 # fails unless every case passed.
 # Usage: x11-capture.sh <cap-gpui> <ffmpeg lib dir> <out-dir>
 set -uo pipefail
@@ -134,7 +134,9 @@ record() {
   result "${name}_finished" "$finished"
   local project video info
   project=$(find "$out/$name/recordings" -maxdepth 1 -name "*.cap" | head -1)
-  result "${name}_recovery_left" "$(find "$out/$name/recordings" -mindepth 2 -maxdepth 2 -name '.recovery*' 2>/dev/null | wc -l)"
+  # A finish keeps its recovery workspace by design; the backup of the media
+  # it replaced must be gone.
+  result "${name}_backup_left" "$(find "$out/$name/recordings" -path '*/.recovery-*/original-segments' 2>/dev/null | wc -l)"
   video=$(find "${project:-/nonexistent}" -path "*segment-0/display.mp4" 2>/dev/null | head -1)
   info=$( [[ -n $video ]] && mp4_info "$video")
   echo "$name: ${video:-no display.mp4} ${info:-}" >>"$out/actions.log"
@@ -175,7 +177,7 @@ cat "$out/result.txt"
 failed=0
 while IFS== read -r key value; do
   case $key in
-    *_panics | *_recovery_left) [[ $value == 0 ]] || failed=1 ;;
+    *_panics | *_backup_left) [[ $value == 0 ]] || failed=1 ;;
     *) [[ $value == yes ]] || failed=1 ;;
   esac
 done <"$out/result.txt"

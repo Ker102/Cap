@@ -51,6 +51,9 @@ the editor and presses the Image background's picker
 portal's file chooser through `mutter-keys.py --type` and presses Select.
 Mutter's RemoteDesktop drops the first key of each session, so `mutter-keys.py`
 leads every session with a Shift tap.
+`SCENARIO=export` records a clip, opens it in the editor and exports it to an
+MP4 and to a GIF (`CAP_GPUI_AUTO_EXPORT`), checking the length each file
+declares.
 
 `report.sh <out-dir>` prints the results with Cap's own log lines. The
 Hyprland image needs `modprobe vkms` on the host. With `GNOME_UNSAFE=1`,
@@ -62,6 +65,12 @@ the GNOME session gets a target bound to `graphical-session.target`, which a
 real login activates.
 
 ## Checks without a desktop
+
+- `x11-capture.sh <cap-gpui> <ffmpeg lib dir> <out-dir>` records the display,
+  an area and another app's window on Xvfb (MIT-SHM capture, no portal),
+  pressing the Stop shortcut with real X input where Cap waits for it, takes a
+  screenshot, and checks the size and length of each result. It also checks the
+  window picker offers the other app's window rather than one of Cap's own.
 
 - `niri-screencast/run.sh` records through Cap's PipeWire capture loop from a
   producer that negotiates and shares frames the way niri 26.04 does: a
