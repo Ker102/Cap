@@ -16,17 +16,17 @@ env:
 
 jobs:
   ab:
-    name: playback x10 at ${{ matrix.label }}
+    name: full macOS fast suite x6 at ${{ matrix.label }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - label: main
-            ref: 8a4b95c4a55455f0ba357005e98bf89027978171
-          - label: before-0325
-            ref: 39af8d5dc
+            ref: 5e9aef48f2a060f423c7908f49b4e7685de0fb4d
+          - label: vt-group
+            ref: 7205c07d2ee1c4f3813006118e1c2dc89ce8bf7e
     runs-on: blacksmith-6vcpu-macos-15
-    timeout-minutes: 150
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,20 +37,20 @@ jobs:
           target: aarch64-apple-darwin
           tier: fast
       - name: Build
-        run: scripts/verify/run.sh fast --suites playback --no-run
+        run: scripts/verify/run.sh fast --no-run
       - name: Prepare fixtures
-        run: scripts/verify/run.sh fast --suites playback --prepare-fixtures --no-run || true
-      - name: Ten playback runs
+        run: scripts/verify/run.sh fast --prepare-fixtures --no-run || true
+      - name: Six full runs
         shell: bash
         run: |
           fails=0
-          for i in $(seq 10); do
+          for i in $(seq 6); do
             export CAP_VERIFY_REPORT_DIR="$RUNNER_TEMP/report-$i"
-            if scripts/verify/run.sh fast --suites playback > "$RUNNER_TEMP/run-$i.log" 2>&1; then
+            if scripts/verify/run.sh fast > "$RUNNER_TEMP/run-$i.log" 2>&1; then
               echo "run $i pass"
             else
               fails=$((fails + 1))
               echo "run $i FAIL: $(grep -ohE 'decoders returned no frame[^\"]*|case [^ ]+ failed' "$RUNNER_TEMP/run-$i.log" | sort -u | tr '\n' ';')"
             fi
           done
-          echo "${{ matrix.label }}: $fails of 10 playback runs failed"
+          echo "${{ matrix.label }}: $fails of 6 full runs failed"
